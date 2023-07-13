@@ -23,12 +23,10 @@ const MEM_SIZE = 25;  // Memory size in 64K Pakes (1600Kb)
 
 
 import thread from "./threadman_thread.js";
-import os from "os";
-import Worker from "web-worker";
 
 class Deferred {
     constructor() {
-        this.promise = new Promise((resolve, reject)=> {
+        this.promise = new Promise((resolve, reject) => {
             this.reject = reject;
             this.resolve = resolve;
         });
@@ -50,12 +48,11 @@ function stringToBase64(str) {
 const threadSource = stringToBase64("(" + thread.toString() + ")(self)");
 const workerSource = "data:application/javascript;base64," + threadSource;
 
-
-
 export default async function buildThreadManager(wasm, singleThread) {
+    singleThread = true;
     const tm = new ThreadManager();
 
-    tm.memory = new WebAssembly.Memory({initial:MEM_SIZE});
+    tm.memory = new WebAssembly.Memory({ initial: MEM_SIZE });
     tm.u8 = new Uint8Array(tm.memory.buffer);
     tm.u32 = new Uint32Array(tm.memory.buffer);
 
@@ -80,76 +77,15 @@ export default async function buildThreadManager(wasm, singleThread) {
     //    tm.pTmp0 = tm.alloc(curve.G2.F.n8*3);
     //    tm.pTmp1 = tm.alloc(curve.G2.F.n8*3);
 
-
-    if (singleThread) {
-        tm.code = wasm.code;
-        tm.taskManager = thread();
-        await tm.taskManager([{
-            cmd: "INIT",
-            init: MEM_SIZE,
-            code: tm.code.slice()
-        }]);
-        tm.concurrency  = 1;
-    } else {
-        tm.workers = [];
-        tm.pendingDeferreds = [];
-        tm.working = [];
-
-        let concurrency;
-
-        if ((typeof(navigator) === "object") && navigator.hardwareConcurrency) {
-            concurrency = navigator.hardwareConcurrency;
-        } else {
-            concurrency = os.cpus().length;
-        }
-
-        if(concurrency == 0){
-            concurrency = 2;
-        }
-
-        // Limit to 64 threads for memory reasons.
-        if (concurrency>64) concurrency=64;
-        tm.concurrency = concurrency;
-
-        for (let i = 0; i<concurrency; i++) {
-
-            tm.workers[i] = new Worker(workerSource);
-
-            tm.workers[i].addEventListener("message", getOnMsg(i));
-
-            tm.working[i]=false;
-        }
-
-        const initPromises = [];
-        for (let i=0; i<tm.workers.length;i++) {
-            const copyCode = wasm.code.slice();
-            initPromises.push(tm.postAction(i, [{
-                cmd: "INIT",
-                init: MEM_SIZE,
-                code: copyCode
-            }], [copyCode.buffer]));
-        }
-
-        await Promise.all(initPromises);
-
-    }
+    tm.code = wasm.code;
+    tm.taskManager = thread();
+    await tm.taskManager([{
+        cmd: "INIT",
+        init: MEM_SIZE,
+        code: tm.code.slice()
+    }]);
+    tm.concurrency = 1;
     return tm;
-
-    function getOnMsg(i) {
-        return function(e) {
-            let data;
-            if ((e)&&(e.data)) {
-                data = e.data;
-            } else {
-                data = e;
-            }
-
-            tm.working[i]=false;
-            tm.pendingDeferreds[i].resolve(data);
-            tm.processWorks();
-        };
-    }
-
 }
 
 class ThreadManager {
@@ -182,7 +118,7 @@ class ThreadManager {
     }
 
     processWorks() {
-        for (let i=0; (i<this.workers.length)&&(this.actionQueue.length > 0); i++) {
+        for (let i = 0; (i < this.workers.length) && (this.actionQueue.length > 0); i++) {
             if (this.working[i] == false) {
                 const work = this.actionQueue.shift();
                 this.postAction(i, work.data, work.transfers, work.deferred);
@@ -218,7 +154,7 @@ class ThreadManager {
     }
 
     getBuff(pointer, length) {
-        return this.u8.slice(pointer, pointer+ length);
+        return this.u8.slice(pointer, pointer + length);
     }
 
     setBuff(pointer, buffer) {
@@ -233,8 +169,8 @@ class ThreadManager {
     }
 
     async terminate() {
-        for (let i=0; i<this.workers.length; i++) {
-            this.workers[i].postMessage([{cmd: "TERMINATE"}]);
+        for (let i = 0; i < this.workers.length; i++) {
+            this.workers[i].postMessage([{ cmd: "TERMINATE" }]);
         }
         await sleep(200);
     }

@@ -1,5 +1,5 @@
 # ffjavascript
-Finite Field Library in Javascript
+Fork of Finite Field Library in Javascript that removes `web_worker` (yes ik) to make it compatible with React Native.
 
 ## License
 
